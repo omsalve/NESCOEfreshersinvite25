@@ -1,15 +1,10 @@
-// app/components/RSVPform.tsx
-
 'use client';
 
-import { useEffect } from 'react';
 import { useFormState, useFormStatus } from 'react-dom';
-import { addGuest, FormState } from '@/app/actions';
+import { addGuest, FormState } from '../actions'; // ✅ fix this path properly
 
-// Initial state for the form
 const initialState: FormState | null = null;
 
-// A helper component to show pending state on the button
 function SubmitButton() {
   const { pending } = useFormStatus();
 
@@ -30,11 +25,8 @@ function SubmitButton() {
 }
 
 export default function RSVPForm() {
-  // useFormState hooks our form to the server action
   const [formState, formAction] = useFormState(addGuest, initialState);
 
-  // We can use a ref or state to clear the input,
-  // but for simplicity, we'll let the success message replace the form.
   if (formState?.success) {
     return (
       <div className="w-full max-w-md p-8 text-center bg-white/10 backdrop-blur-lg rounded-2xl shadow-2xl border border-white/20">
@@ -42,7 +34,6 @@ export default function RSVPForm() {
           {formState.success}
         </h2>
         <p className="text-gray-200">You're on the list. See you there.</p>
-        {/* We don't show the "RSVP for someone else" button to keep the success message final */}
       </div>
     );
   }
@@ -60,7 +51,8 @@ export default function RSVPForm() {
           <input
             type="text"
             id="name"
-            name="name" // The 'name' attribute is crucial for FormData
+            name="name"
+            required
             placeholder="Enter your full name"
             className="w-full p-3.5 rounded-lg bg-black/30 text-white placeholder-gray-400 border border-white/30 
                        focus:outline-none focus:ring-2 focus:ring-purple-400 focus:border-transparent transition-all duration-300"

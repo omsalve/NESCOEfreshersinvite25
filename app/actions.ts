@@ -1,6 +1,7 @@
+// app/actions.ts
 'use server';
 
-import { createClient } from 'redis';
+import { createClient, SupabaseClient } from '@supabase/supabase-js';
 
 // --- TYPES ---
 export type FormState = {
@@ -8,26 +9,22 @@ export type FormState = {
   error?: string;
 };
 
-type Guest = {
+export type Guest = {
   name: string;
-  createdAt: string;
+  createdAt: string; // camelCase for frontend
 };
 
-// --- REDIS CLIENT (Single Instance) ---
-let redisClient: ReturnType<typeof createClient> | null = null;
+// --- SUPABASE CLIENT ---
+let supabase: SupabaseClient | null = null;
 
-async function getRedisClient() {
-  if (redisClient && redisClient.isOpen) return redisClient;
+function getSupabaseClient(): SupabaseClient {
+  if (supabase) return supabase;
 
-  const client = createClient({
-    url: process.env.REDIS_URL, // e.g. redis://default:password@host:port
-  });
+  const url = process.env.NESCO_SUPABASE_URL!;
+  const anonKey = process.env.NESCO_SUPABASE_ANON_KEY!;
 
-  client.on('error', (err) => console.error('Redis Client Error:', err));
-
-  await client.connect();
-  redisClient = client;
-  return client;
+  supabase = createClient(url, anonKey);
+  return supabase;
 }
 
 // --- ADD GUEST ---
@@ -42,18 +39,20 @@ export async function addGuest(
   }
 
   try {
-    const client = await getRedisClient();
+    const client = getSupabaseClient();
 
-    const guest: Guest = {
-      name: name.trim(),
-      createdAt: new Date().toISOString(),
-    };
+    const { error } = await client
+      .from('guests')
+      .insert([{ name: name.trim() }]);
 
-    await client.lPush('guest_list', JSON.stringify(guest));
+    if (error) {
+      console.error('Supabase insert error:', error);
+      return { error: 'Server error. Please try again later.' };
+    }
 
-    return { success: `Thank you, ${guest.name}! You're on the guest list.` };
+    return { success: `Thank you, ${name.trim()}! You're on the guest list.` };
   } catch (err) {
-    console.error('Error adding guest:', err);
+    console.error('Unexpected error adding guest:', err);
     return { error: 'Server error. Please try again later.' };
   }
 }
@@ -61,25 +60,27 @@ export async function addGuest(
 // --- GET GUEST LIST ---
 export async function getGuestList(): Promise<Guest[]> {
   try {
-    const client = await getRedisClient();
-    const data = await client.lRange('guest_list', 0, -1);
+    const client = getSupabaseClient();
 
-    if (!data || data.length === 0) return [];
+    const { data, error } = await client
+      .from('guests')
+      .select('name, created_at')
+      .order('created_at', { ascending: true });
 
-    const guests = data.map((g: string) => {
-      try {
-        return JSON.parse(g) as Guest;
-      } catch {
-        return { name: g, createdAt: new Date().toISOString() };
-      }
-    });
+    if (error) {
+      console.error('Supabase select error:', error);
+      return [];
+    }
 
-    return guests.sort(
-      (a, b) =>
-        new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
-    );
+    if (!data) return [];
+
+    // Map snake_case to camelCase
+    return data.map((g: any) => ({
+      name: g.name,
+      createdAt: g.created_at,
+    }));
   } catch (err) {
-    console.error('Error fetching guest list:', err);
+    console.error('Unexpected error fetching guest list:', err);
     return [];
   }
 }
